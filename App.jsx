@@ -7,8 +7,9 @@ import {
   AlertTriangle, X, Layout, Compass, Monitor, ShieldAlert
 } from 'lucide-react';
 
-// API key is provided by the execution environment at runtime
-const apiKey = ""; 
+// Use Vite's environment variable for Vercel hosting
+// In Vercel, the variable MUST be named: VITE_GEMINI_API_KEY
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
 const App = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -41,6 +42,11 @@ const App = () => {
 
   // --- ✨ AI ORCHESTRATION WITH DIAGNOSTICS ---
   const callAI = async (prompt, sys, mode = 'text') => {
+    // DIAGNOSTIC CHECK
+    if (!apiKey || apiKey.length < 5) {
+      return "DIAGNOSTIC ERROR: API Key missing in Vercel. Ensure VITE_GEMINI_API_KEY is added to Environment Variables and you have REDEPLOYED.";
+    }
+
     setIsProcessing(true);
     const voiceOptimizedSys = sys + " IMPORTANT: Use plain human-friendly text ONLY. Do not use markdown symbols (no asterisks, no hashtags).";
     
@@ -51,28 +57,24 @@ const App = () => {
       ? { instances: { prompt }, parameters: { sampleCount: 1 } }
       : { contents: [{ parts: [{ text: prompt }] }], systemInstruction: { parts: [{ text: voiceOptimizedSys }] } };
 
-    // Implementation of exponential backoff for API calls
-    const delays = [1000, 2000, 4000, 8000, 16000];
-    for (let i = 0; i <= delays.length; i++) {
-      try {
-        const r = await fetch(mode === 'image' ? imageUrl : textUrl, { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload) 
-        });
+    try {
+      const r = await fetch(mode === 'image' ? imageUrl : textUrl, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload) 
+      });
 
-        if (r.status === 403) return "DIAGNOSTIC ERROR: Your API Key is invalid or has expired permissions.";
-        if (!r.ok) throw new Error("API request failed");
-        
-        const d = await r.json();
-        if (mode === 'image') return `data:image/png;base64,${d.predictions[0].bytesBase64Encoded}`;
-        return d.candidates[0].content.parts[0].text;
-      } catch (e) {
-        if (i === delays.length) return "ORCHESTRATION FAILED: Check internet connection or API Quota limits.";
-        await new Promise(res => setTimeout(res, delays[i]));
-      } finally {
-        if (i === delays.length || !isProcessing) setIsProcessing(false);
+      if (r.status === 403 || r.status === 400) {
+        return "DIAGNOSTIC ERROR: The API Key provided is either invalid, expired, or restricted. Please get a fresh key from Google AI Studio.";
       }
+
+      const d = await r.json();
+      if (mode === 'image') return `data:image/png;base64,${d.predictions[0].bytesBase64Encoded}`;
+      return d.candidates[0].content.parts[0].text;
+    } catch (e) {
+      return "ORCHESTRATION FAILED: Network error. Please check internet connection.";
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -80,7 +82,7 @@ const App = () => {
     if (!val) return;
     let res, sys, title;
     if (type === 'student') {
-        sys = "Expert academic counselor for GSS Garki students. Create an 8-day intensive study plan.";
+        sys = "Expert academic counselor for GSS Garki. Create an 8-day intensive study plan.";
         title = "Student Success Blueprint";
         res = await callAI(`Plan for ${val}`, sys);
     } else if (type === 'teacher') {
@@ -104,7 +106,6 @@ const App = () => {
     setShowModal(true);
   };
 
-  // --- FULL 13-SLIDE DECK ---
   const slides = [
     // 00: HERO
     <div className="flex flex-col items-center justify-center text-center space-y-8 h-full">
@@ -114,14 +115,14 @@ const App = () => {
       <div className="pt-12"><p className="text-2xl font-bold uppercase tracking-widest text-white">Babatunde Adesina</p><p className="text-blue-400 font-bold text-xs tracking-[0.4em]">THE AGENTIC ORCHESTRATOR</p></div>
     </div>,
 
-    // 01: ROTARY BRANDING
+    // 01: ROTARY
     <div className="grid lg:grid-cols-2 gap-12 items-center h-full">
       <div className="space-y-8 text-left">
         <h2 className="text-4xl lg:text-7xl font-black text-yellow-500 uppercase leading-none tracking-tighter">The <br/><span className="text-white">HighRise</span> Force</h2>
         <p className="text-xl lg:text-2xl text-slate-300">Facilitated by the <strong>Rotary Club of Abuja HighRise</strong>. Service Above Self through technology.</p>
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-blue-600/10 p-6 rounded-3xl border border-blue-500/20 text-white"><Heart className="text-yellow-500 mb-2"/><p className="font-bold text-sm">Service</p></div>
-          <div className="bg-blue-600/10 p-6 rounded-3xl border border-blue-500/20 text-white"><ShieldCheck className="text-yellow-500 mb-2"/><p className="font-bold text-sm">Ethics</p></div>
+          <div className="bg-blue-600/10 p-6 rounded-3xl border border-blue-500/20 text-white font-bold text-sm text-center">Service Above Self</div>
+          <div className="bg-blue-600/10 p-6 rounded-3xl border border-blue-500/20 text-white font-bold text-sm text-center">The 4-Way Test</div>
         </div>
       </div>
       <div className="rounded-[40px] overflow-hidden border border-white/10 h-64 lg:h-[500px]">
@@ -129,124 +130,33 @@ const App = () => {
       </div>
     </div>,
 
-    // 02: DATA DETECTIVE
+    // 02: GIFT TOOLS
     <div className="grid lg:grid-cols-2 gap-12 items-center h-full">
-      <div className="rounded-[40px] overflow-hidden border border-white/10 h-64 lg:h-[500px]">
-        <img src="https://images.unsplash.com/photo-1551288049-bbbda536639a?q=80&w=1280" className="w-full h-full object-cover" alt="Data" />
+      <div className="bg-slate-800/40 p-10 rounded-[50px] border border-white/10 space-y-8 flex flex-col justify-center h-full shadow-2xl">
+        <GraduationCap className="text-yellow-500" size={60}/>
+        <h3 className="text-4xl font-black uppercase text-white">Gift: Success Navigator</h3>
+        <p className="text-2xl text-slate-300 italic">Try it: Enter your subjects below.</p>
+        <input id="stu-in" className="w-full bg-black/50 p-6 rounded-2xl text-white outline-none border border-white/10 focus:border-blue-500 text-xl" placeholder="e.g. Maths, Biology" />
+        <button onClick={() => runAction('student', document.getElementById('stu-in').value)} className="w-full bg-blue-600 hover:bg-blue-500 py-6 rounded-2xl font-bold uppercase text-xl transition-all">Orchestrate</button>
       </div>
-      <div className="space-y-8 text-left">
-        <h2 className="text-4xl lg:text-6xl font-black text-yellow-500 uppercase leading-none border-l-8 border-blue-600 pl-6">Data Detective</h2>
-        <p className="text-xl lg:text-2xl text-slate-300">Data is the oil of Garki. Analysis is the engine that finds the Truth in the noise.</p>
-      </div>
-    </div>,
-
-    // 03: THE AI BRAIN
-    <div className="grid lg:grid-cols-2 gap-12 items-center h-full">
-      <div className="space-y-8 text-left">
-        <h2 className="text-4xl lg:text-6xl font-black text-yellow-500 uppercase leading-none border-l-8 border-blue-600 pl-6">The Digital Brain</h2>
-        <p className="text-xl lg:text-2xl text-slate-300">AI mimics logic to process facts. It doesn't just think; it <span className="text-white font-bold">Orchestrates</span>.</p>
-      </div>
-      <div className="rounded-[40px] overflow-hidden border border-white/10 h-64 lg:h-[500px]">
-        <img src="https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=1280" className="w-full h-full object-cover" alt="AI" />
+      <div className="bg-slate-800/40 p-10 rounded-[50px] border border-white/10 space-y-8 flex flex-col justify-center h-full shadow-2xl">
+        <Briefcase className="text-blue-400" size={60}/>
+        <h3 className="text-4xl font-black uppercase text-white">Gift: Educator Pro</h3>
+        <p className="text-2xl text-slate-300 italic">Try it: Enter a lesson topic.</p>
+        <input id="tea-in" className="w-full bg-black/50 p-6 rounded-2xl text-white outline-none border border-white/10 focus:border-blue-500 text-xl" placeholder="e.g. Photosynthesis" />
+        <button onClick={() => runAction('teacher', document.getElementById('tea-in').value)} className="w-full bg-slate-700 hover:bg-slate-600 py-6 rounded-2xl font-bold uppercase text-xl transition-all">Draft Strategy</button>
       </div>
     </div>,
 
-    // 04: THE GAME
-    <div className="flex flex-col justify-center space-y-8 h-full">
-      <h2 className="text-4xl lg:text-6xl font-black text-yellow-500 uppercase">Interactive: Pattern Logic</h2>
-      <div className="overflow-hidden rounded-3xl border border-white/10 bg-black/40">
-        <table className="w-full text-left">
-          <thead className="bg-blue-900/50 text-white">
-            <tr><th className="p-6 text-xs uppercase font-black">Student</th><th className="p-6 text-xs uppercase font-black">Score</th><th className="p-6 text-xs uppercase font-black">Access</th><th className="p-6 text-xs uppercase font-black">AI Prediction</th></tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            <tr><td className="p-6">Student X</td><td className="p-6">295</td><td className="p-6 text-green-400">Yes</td><td className="p-6 font-bold text-green-400">PASS</td></tr>
-            <tr className="bg-white/5"><td className="p-6">Student Y</td><td className="p-6">110</td><td className="p-6 text-red-400">No</td><td className="p-6 font-bold text-red-400">INTERVENE</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p className="text-center text-slate-400 italic">"Access + Effort = Outcome."</p>
-    </div>,
-
-    // 05: CAREERS 2030
-    <div className="flex flex-col justify-center space-y-12 h-full">
-       <h2 className="text-4xl lg:text-7xl font-black text-yellow-500 uppercase text-center">Careers 2030</h2>
-       <div className="grid lg:grid-cols-2 gap-8">
-          <div className="bg-blue-600/10 p-10 rounded-[40px] border border-blue-500/20 text-center">
-             <p className="text-7xl font-black text-white">+95%</p>
-             <p className="text-slate-400 uppercase font-bold text-sm tracking-widest mt-2">AI Roles</p>
-          </div>
-          <div className="bg-red-500/10 p-10 rounded-[40px] border border-red-500/20 text-center">
-             <p className="text-7xl font-black text-white">-12%</p>
-             <p className="text-slate-400 uppercase font-bold text-sm tracking-widest mt-2">Routine Work</p>
-          </div>
-       </div>
-    </div>,
-
-    // 06: ETHICS
-    <div className="grid lg:grid-cols-3 gap-6 h-full items-center">
-       <div className="bg-white/5 p-8 rounded-[40px] text-center space-y-4"><Zap className="text-yellow-500 mx-auto" size={48}/><h3 className="text-2xl font-black text-white uppercase">Truth</h3><p className="text-slate-400 text-sm">Eliminate Bias.</p></div>
-       <div className="bg-white/5 p-8 rounded-[40px] text-center space-y-4"><Users className="text-blue-400 mx-auto" size={48}/><h3 className="text-2xl font-black text-white uppercase">Fairness</h3><p className="text-slate-400 text-sm">Build Goodwill.</p></div>
-       <div className="bg-white/5 p-8 rounded-[40px] text-center space-y-4"><Heart className="text-yellow-500 mx-auto" size={48}/><h3 className="text-2xl font-black text-white uppercase">Benefit</h3><p className="text-slate-400 text-sm">GSS Garki First.</p></div>
-    </div>,
-
-    // 07: STUDENT GIFT
-    <div className="bg-slate-800/40 p-10 rounded-[50px] border border-white/10 space-y-8 flex flex-col justify-center h-full">
-      <div className="flex items-center gap-6"><GraduationCap className="text-yellow-500" size={60}/> <h3 className="text-4xl font-black uppercase text-white">Student Navigator</h3></div>
-      <p className="text-2xl text-slate-300">Draft your 8-day academic study plan.</p>
-      <input id="stu-in" className="w-full bg-black/50 p-6 rounded-2xl text-white outline-none border border-white/10 focus:border-blue-500 text-xl" placeholder="e.g. Maths, Biology" />
-      <button onClick={() => runAction('student', document.getElementById('stu-in').value)} className="w-full bg-blue-600 hover:bg-blue-500 py-6 rounded-2xl font-bold uppercase text-xl transition-all">Orchestrate</button>
-    </div>,
-
-    // 08: TEACHER GIFT
-    <div className="bg-slate-800/40 p-10 rounded-[50px] border border-white/10 space-y-8 flex flex-col justify-center h-full">
-      <div className="flex items-center gap-6"><Briefcase className="text-blue-400" size={60}/> <h3 className="text-4xl font-black uppercase text-white">Educator Pro</h3></div>
-      <p className="text-2xl text-slate-300">Rapid lesson plan orchestration for teachers.</p>
-      <input id="tea-in" className="w-full bg-black/50 p-6 rounded-2xl text-white outline-none border border-white/10 focus:border-blue-500 text-xl" placeholder="e.g. Photosynthesis" />
-      <button onClick={() => runAction('teacher', document.getElementById('tea-in').value)} className="w-full bg-slate-700 hover:bg-slate-600 py-6 rounded-2xl font-bold uppercase text-xl transition-all">Draft Strategy</button>
-    </div>,
-
-    // 09: PRINCIPAL/ROTARY
-    <div className="grid lg:grid-cols-2 gap-8 h-full items-center">
-      <div className="bg-white/5 p-8 rounded-[40px] space-y-6 text-left border border-white/5">
-        <Settings className="text-yellow-500"/><h3 className="text-2xl font-black text-white uppercase">Principal Dash</h3>
-        <input id="pri-in" className="w-full bg-black p-4 rounded-xl border border-white/10" placeholder="e.g. Attendance"/>
-        <button onClick={() => runAction('principal', document.getElementById('pri-in').value)} className="w-full bg-blue-900 py-3 rounded-xl font-bold uppercase">Optimize</button>
-      </div>
-      <div className="bg-white/5 p-8 rounded-[40px] space-y-6 text-left border border-white/5">
-        <Compass className="text-blue-400"/><h3 className="text-2xl font-black text-white uppercase">Impact Audit</h3>
-        <input id="rot-in" className="w-full bg-black p-4 rounded-xl border border-white/10" placeholder="e.g. Water project"/>
-        <button onClick={() => runAction('rotary', document.getElementById('rot-in').value)} className="w-full bg-blue-600 py-3 rounded-xl font-bold uppercase">Audit</button>
-      </div>
-    </div>,
-
-    // 10: MOTIVATION
-    <div className="flex flex-col items-center justify-center text-center space-y-8 h-full">
-       <h2 className="text-7xl lg:text-[140px] font-black text-white leading-[0.8] uppercase tracking-tighter">ORCHESTRATE <br/><span className="text-yellow-500 italic">DESTINY</span></h2>
-       <p className="text-3xl text-slate-400 font-light max-w-4xl">Garki is not your limit. It is your <span className="text-white font-bold underline decoration-blue-600">Launchpad</span>.</p>
-    </div>,
-
-    // 11: VISUALIZATION
-    <div className="flex flex-col items-center justify-center text-center space-y-12 h-full">
-       <h2 className="text-4xl lg:text-6xl font-black text-yellow-500 uppercase">The Challenge</h2>
-       <div className="bg-white/5 border-4 border-dashed border-blue-500/30 p-12 max-w-3xl rounded-[50px] w-full">
-          <p className="text-2xl mb-8">What problem should we solve next?</p>
-          <div className="flex gap-4">
-             <input id="vis-in" className="flex-1 bg-black/50 p-4 rounded-xl text-white border border-white/10" placeholder="e.g. Solar street lights" />
-             <button onClick={() => runAction('visualize', document.getElementById('vis-in').value)} className="bg-purple-600 px-8 rounded-xl font-bold text-white transition-all">Visualize</button>
-          </div>
-       </div>
-    </div>,
-
-    // 12: ACCESS
+    // 03: ACCESS
     <div className="flex flex-col items-center justify-center space-y-12 h-full text-center">
-      <h2 className="text-5xl lg:text-8xl font-black text-white uppercase tracking-tighter">Final Access</h2>
+      <h2 className="text-4xl lg:text-7xl font-black text-white uppercase tracking-tighter leading-none">The Orchestration <br/><span className="text-yellow-500 italic text-5xl">Toolkit Access</span></h2>
       <div className="flex items-center gap-10 bg-white/5 p-12 rounded-[60px] border-2 border-yellow-500/20 shadow-2xl">
          <div className="bg-white p-4 rounded-3xl"><QrCode size={180} className="text-black" /></div>
-         <div className="text-left space-y-2">
-            <p className="text-4xl font-black uppercase text-white tracking-tighter">GSS Toolkit</p>
+         <div className="text-left space-y-4">
+            <p className="text-3xl font-black text-white uppercase">Scan to Open</p>
             <p className="text-lg text-yellow-500 font-bold uppercase tracking-widest">bit.ly/GarkiHighRiseAI</p>
-            <button onClick={() => window.print()} className="mt-4 bg-white/10 px-6 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 text-white"><Download size={14}/> Handout</button>
+            <button onClick={() => window.print()} className="mt-4 bg-white/10 px-6 py-2 rounded-xl text-xs font-bold uppercase border border-white/10 flex items-center gap-2 text-white"><Download size={14}/> Save Handout</button>
          </div>
       </div>
       <p className="text-xl font-bold text-slate-500 uppercase tracking-[0.5em] animate-pulse">Service Above Self</p>
@@ -258,13 +168,13 @@ const App = () => {
   const prevSlide = () => setCurrentSlide(prev => Math.max(prev - 1, 0));
 
   return (
-    <div className="relative bg-slate-950 text-slate-200 w-screen h-screen flex flex-col overflow-hidden selection:bg-blue-600 selection:text-white">
+    <div className="relative bg-slate-950 text-slate-200 w-screen h-screen flex flex-col overflow-hidden selection:bg-blue-600 selection:text-white font-sans">
       
       {/* 🚢 HEADER NAVIGATION */}
       <nav className="fixed top-0 left-0 right-0 h-16 bg-black/40 backdrop-blur-xl border-b border-white/10 z-40 flex items-center justify-between px-8 no-print">
          <div className="flex items-center gap-3"><BrainCircuit className="text-blue-500" /><span className="font-black text-sm tracking-widest uppercase text-white">GSS Garki Suite</span></div>
          <div className="flex gap-2">
-            {[...Array(totalSlides)].map((_, i) => (
+            {slides.map((_, i) => (
               <button key={i} onClick={() => setCurrentSlide(i)} className={`h-1 rounded-full transition-all duration-300 ${i === currentSlide ? 'w-10 bg-yellow-500' : 'w-2 bg-slate-700'}`}></button>
             ))}
          </div>
@@ -278,9 +188,9 @@ const App = () => {
       </main>
 
       {/* ⚓ PERSISTENT FOOTER BRANDING */}
-      <footer className="fixed bottom-0 left-0 right-0 h-20 bg-blue-900 border-t-8 border-yellow-500 z-50 flex items-center justify-between px-6 lg:px-20 no-print shadow-2xl">
+      <footer className="fixed bottom-0 left-0 right-0 h-20 bg-blue-900 border-t-8 border-yellow-500 z-50 flex items-center justify-between px-6 lg:px-20 no-print shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
         <div className="flex items-center gap-6">
-          <div className="h-10 w-10 lg:h-12 lg:w-12 bg-yellow-500 rounded-full flex items-center justify-center animate-spin-slow shadow-lg">
+          <div className="h-10 w-10 lg:h-12 lg:w-12 bg-yellow-500 rounded-full flex items-center justify-center shadow-lg animate-spin-slow">
             <Settings className="text-blue-900 h-6 w-6 lg:h-8 lg:w-8" />
           </div>
           <p className="text-lg lg:text-2xl font-black text-white uppercase tracking-tight">
@@ -304,7 +214,7 @@ const App = () => {
       {/* 🤖 AI RESULT TERMINAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black/98 backdrop-blur-3xl z-[200] flex items-center justify-center p-4 lg:p-20 animate-in fade-in duration-300">
-          <div className="bg-slate-900 border-2 border-yellow-500/50 rounded-[40px] w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+          <div className="bg-slate-900 border-2 border-yellow-500/50 rounded-[40px] w-full max-w-6xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
             <div className="p-6 lg:p-10 border-b border-white/10 flex justify-between items-center bg-white/5">
               <h3 className="text-2xl lg:text-3xl font-black text-white uppercase tracking-tighter">{aiResult.title || "Orchestration Log"}</h3>
               <div className="flex gap-4">
